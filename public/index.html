@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Business Expense Tracker</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3>Expense Tracker</h3>
+                <button id="toggleSidebar" class="sidebar-toggle"><i class="fas fa-bars"></i></button>
+            </div>
+            <ul>
+                <li><a href="#" onclick="showSection('manageExpenses'); loadExpenses();"><i class="fas fa-wallet"></i> Manage Expenses</a></li>
+                <li><a href="#" onclick="showSection('manageCategories'); loadCategories();"><i class="fas fa-tags"></i> Manage Categories</a></li>
+                <li><a href="#" onclick="showSection('analyticsSection'); loadAnalytics();"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+                <li><a href="#" onclick="showSection('manageBudgets'); loadBudgetStatus();"><i class="fas fa-piggy-bank"></i> Manage Budgets</a></li>
+                <li><a href="#" onclick="showSection('insights'); loadInsights();"><i class="fas fa-lightbulb"></i> Insights</a></li>
+                <li><a href="#" onclick="showSection('chatbot');"><i class="fas fa-robot"></i> Chatbot</a></li>
+                <li><a href="#" onclick="exportToCSV();"><i class="fas fa-file-export"></i> Export to CSV</a></li>
+            </ul>
+            <div class="theme-toggle">
+                <button id="toggleDarkMode"><i class="fas fa-moon"></i> Toggle Theme</button>
+            </div>
+        </nav>
+        <main class="main-content">
+            <header>
+                <button id="mainToggleSidebar" class="sidebar-toggle"><i class="fas fa-bars"></i></button>
+                <h1>AI Business Expense Tracker</h1>
+            </header>
+            <section id="manageExpenses" class="section active">
+                <div class="card">
+                    <h2>Manage Expenses</h2>
+                    <form id="expenseForm">
+                        <input type="date" id="date" required>
+                        <input type="number" id="amount" step="0.01" placeholder="Amount" required>
+                        <select id="category" required></select>
+                        <input type="text" id="description" placeholder="Description">
+                        <button type="submit">Add Expense</button>
+                    </form>
+                    <div class="filters">
+                        <input type="text" id="search" placeholder="Search..." oninput="loadExpenses()">
+                        <select id="categoryFilter" onchange="loadExpenses()">
+                            <option value="">All Categories</option>
+                        </select>
+                        <select id="sort" onchange="loadExpenses()">
+                            <option value="date-desc">Date (Newest First)</option>
+                            <option value="date-asc">Date (Oldest First)</option>
+                            <option value="amount-desc">Amount (High to Low)</option>
+                            <option value="amount-asc">Amount (Low to High)</option>
+                        </select>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseList"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section id="manageCategories" class="section">
+                <div class="card">
+                    <h2>Manage Categories</h2>
+                    <form id="categoryForm">
+                        <input type="text" id="newCategory" placeholder="New Category" required>
+                        <button type="submit">Add Category</button>
+                    </form>
+                    <ul id="categoryList"></ul>
+                </div>
+            </section>
+            <section id="analyticsSection" class="section">
+                <div class="card">
+                    <h2>Analytics</h2>
+                    <div id="analytics" class="analytics"></div>
+                </div>
+            </section>
+            <section id="manageBudgets" class="section">
+                <div class="card">
+                    <h2>Manage Budgets</h2>
+                    <form id="budgetForm">
+                        <select id="budgetCategory" required></select>
+                        <input type="month" id="budgetMonth" required>
+                        <input type="number" id="budgetAmount" step="0.01" placeholder="Budget Amount" required>
+                        <button type="submit">Set Budget</button>
+                    </form>
+                    <h3>Budget Status</h3>
+                    <div id="budgetStatus"></div>
+                </div>
+            </section>
+            <section id="insights" class="section">
+                <div class="card">
+                    <h2><i class="fas fa-lightbulb"></i> AI Insights</h2>
+                    <div id="ai-insights" class="insights-container">
+                        <div class="loading">Loading insights...</div>
+                    </div>
+                </div>
+            </section>
+            <section id="chatbot" class="section">
+                <div class="card chat-card">
+                    <h2><i class="fas fa-robot"></i> Chat with Your Financial Assistant</h2>
+                    <div class="chat-container">
+                        <div id="chat-history" class="chat-history">
+                            <!-- Chat messages will appear here -->
+                            <div class="ai-message">
+                                <div class="avatar"><i class="fas fa-robot"></i></div>
+                                <div class="message-content">
+                                    <p>Hello! I'm your financial assistant. Ask me about your expenses, budgets, or how to save money.</p>
+                                    <span class="timestamp"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" id="chat-input" placeholder="Type your message...">
+                            <button id="send-message" onclick="sendChatMessage()">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
