@@ -1,7 +1,7 @@
 // script.js
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000/api' // Use local backend during development
-    : '/api'; // Use relative path in production (Vercel)
+    ? 'http://localhost:3000/api'
+    : 'https://your-app-name.vercel.app/api'; // Replace with your actual Vercel URL
 
 document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('darkMode') === 'true') {
@@ -10,87 +10,182 @@ document.addEventListener('DOMContentLoaded', () => {
     // Make sidebar visible by default
     document.getElementById('sidebar').classList.add('active');
     document.querySelector('.main-content').classList.add('active');
-    
-    loadExpenses();
-    loadCategories();
-    loadAnalytics();
-    loadBudgetStatus();
-    
+
     // Function to toggle sidebar
     const toggleSidebar = () => {
         document.getElementById('sidebar').classList.toggle('active');
         document.querySelector('.main-content').classList.toggle('active');
     };
-    
+
     // Add click handlers for both toggle buttons
-    document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
-    document.getElementById('mainToggleSidebar').addEventListener('click', toggleSidebar);
+    const mainToggleSidebar = document.getElementById('mainToggleSidebar');
+    if (mainToggleSidebar) {
+        mainToggleSidebar.addEventListener('click', toggleSidebar);
+    }
+
+    // Dark mode toggle
+    const toggleDarkMode = document.getElementById('toggleDarkMode');
+    if (toggleDarkMode) {
+        toggleDarkMode.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        });
+    }
+
+    // Expense form submission
+    const expenseForm = document.getElementById('expenseForm');
+    if (expenseForm) {
+        expenseForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const date = document.getElementById('date').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const category = document.getElementById('category').value;
+            const description = document.getElementById('description').value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/expenses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, amount, category, description })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to add expense');
+                }
+                document.getElementById('expenseForm').reset();
+                loadExpenses();
+                loadAnalytics();
+                loadBudgetStatus();
+            } catch (error) {
+                console.error('Error adding expense:', error);
+                alert('Failed to add expense: ' + error.message);
+            }
+        });
+    }
+
+    // Category form submission
+    const categoryForm = document.getElementById('categoryForm');
+    if (categoryForm) {
+        categoryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('newCategory').value;
+            try {
+                const response = await fetch(`${API_BASE_URL}/categories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to add category');
+                }
+                document.getElementById('categoryForm').reset();
+                loadCategories();
+            } catch (error) {
+                console.error('Error adding category:', error);
+                alert('Failed to add category: ' + error.message);
+            }
+        });
+    }
+
+    // Budget form submission
+    const budgetForm = document.getElementById('budgetForm');
+    if (budgetForm) {
+        budgetForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const category = document.getElementById('budgetCategory').value;
+            const month = document.getElementById('budgetMonth').value;
+            const budget_amount = parseFloat(document.getElementById('budgetAmount').value);
+
+            try {
+                await fetch(`${API_BASE_URL}/budgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, month, budget_amount })
+                });
+                document.getElementById('budgetForm').reset();
+                loadBudgetStatus();
+            } catch (error) {
+                console.error('Error setting budget:', error);
+                alert('Failed to set budget: ' + error.message);
+            }
+        });
+    }
+
+    // Filter event listeners
+    const searchInput = document.getElementById('search');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const sortSelect = document.getElementById('sort');
+
+    if (searchInput) searchInput.addEventListener('input', loadExpenses);
+    if (categoryFilter) categoryFilter.addEventListener('change', loadExpenses);
+    if (sortSelect) sortSelect.addEventListener('change', loadExpenses);
+
+    // Load initial data
+    loadCategories();
+    loadExpenses();
+    loadAnalytics();
+    loadBudgetStatus();
+
+    // Load section-specific data when sections are shown
+    const analyticsSection = document.getElementById('analytics');
+    if (analyticsSection) {
+        analyticsSection.addEventListener('transitionend', () => {
+            if (analyticsSection.classList.contains('active')) {
+                loadAnalytics();
+            }
+        });
+    }
+
+    const insightsSection = document.getElementById('insights');
+    if (insightsSection) {
+        insightsSection.addEventListener('transitionend', () => {
+            if (insightsSection.classList.contains('active')) {
+                loadInsights();
+            }
+        });
+    }
+
+    const visualReportSection = document.getElementById('visualReport');
+    if (visualReportSection) {
+        visualReportSection.addEventListener('transitionend', () => {
+            if (visualReportSection.classList.contains('active')) {
+                loadVisualReport();
+            }
+        });
+    }
 });
 
 // --- Section Navigation ---
 function showSection(sectionId) {
-    // Hide all sections first
     document.querySelectorAll('.section').forEach(section => {
         section.classList.remove('active');
         section.style.display = 'none';
     });
 
-    // Show the selected section
     const selectedSection = document.getElementById(sectionId);
     if (selectedSection) {
         selectedSection.style.display = 'block';
-        // Trigger reflow to ensure transition works
-        selectedSection.offsetHeight;
+        selectedSection.offsetHeight; // Trigger reflow
         selectedSection.classList.add('active');
     }
 
-    // Close sidebar on mobile after section change
     if (window.innerWidth <= 768) {
         document.getElementById('sidebar').classList.remove('active');
         document.querySelector('.main-content').classList.remove('active');
     }
 }
 
-// --- Dark Mode Toggle ---
-document.getElementById('toggleDarkMode').addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
-});
-
 // --- Expense Management ---
-document.getElementById('expenseForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const date = document.getElementById('date').value;
-    const amount = parseFloat(document.getElementById('amount').value);
-    const category = document.getElementById('category').value;
-    const description = document.getElementById('description').value;
-
-    try {
-        await fetch(`${API_BASE_URL}/expenses`, { // Fixed: Removed /api/
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date, amount, category, description })
-        });
-        document.getElementById('expenseForm').reset();
-        loadExpenses();
-        loadAnalytics();
-        loadBudgetStatus();
-    } catch (error) {
-        console.error('Error adding expense:', error);
-        alert('Failed to add expense: ' + error.message);
-    }
-});
-
 async function loadExpenses() {
     const search = document.getElementById('search').value;
     const category = document.getElementById('categoryFilter').value;
     const sort = document.getElementById('sort').value;
     try {
-        const response = await fetch(`${API_BASE_URL}/expenses?search=${search}&category=${category}`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/expenses?search=${search}&category=${category}`);
         if (!response.ok) throw new Error(`Failed to fetch expenses: ${response.statusText}`);
         let expenses = await response.json();
 
-        // Sort expenses
         if (sort === 'date-asc') expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
         if (sort === 'date-desc') expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
         if (sort === 'amount-asc') expenses.sort((a, b) => a.amount - b.amount);
@@ -98,6 +193,11 @@ async function loadExpenses() {
 
         const expenseList = document.getElementById('expenseList');
         expenseList.innerHTML = '';
+
+        if (expenses.length === 0) {
+            expenseList.innerHTML = '<tr><td colspan="5">No expenses found</td></tr>';
+            return;
+        }
 
         expenses.forEach(exp => {
             const row = document.createElement('tr');
@@ -117,6 +217,10 @@ async function loadExpenses() {
         });
     } catch (error) {
         console.error('Error loading expenses:', error);
+        const expenseList = document.getElementById('expenseList');
+        if (expenseList) {
+            expenseList.innerHTML = `<tr><td colspan="5">Error loading expenses: ${error.message}</td></tr>`;
+        }
     }
 }
 
@@ -127,7 +231,7 @@ async function editExpense(id, field, value) {
     let description = field === 'description' ? value : document.querySelector(`input[onchange="editExpense(${id}, 'description', this.value)"]`).value;
 
     try {
-        await fetch(`${API_BASE_URL}/expenses/${id}`, { // Fixed: Removed /api/
+        await fetch(`${API_BASE_URL}/expenses/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date, amount, category, description })
@@ -137,12 +241,13 @@ async function editExpense(id, field, value) {
         loadBudgetStatus();
     } catch (error) {
         console.error('Error editing expense:', error);
+        alert('Failed to edit expense: ' + error.message);
     }
 }
 
 async function deleteExpense(id) {
     try {
-        await fetch(`${API_BASE_URL}/expenses/${id}`, { // Fixed: Removed /api/
+        await fetch(`${API_BASE_URL}/expenses/${id}`, {
             method: 'DELETE'
         });
         loadExpenses();
@@ -150,34 +255,14 @@ async function deleteExpense(id) {
         loadBudgetStatus();
     } catch (error) {
         console.error('Error deleting expense:', error);
+        alert('Failed to delete expense: ' + error.message);
     }
 }
 
 // --- Category Management ---
-document.getElementById('categoryForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = document.getElementById('newCategory').value;
-    try {
-        const response = await fetch(`${API_BASE_URL}/categories`, { // Fixed: Removed /api/
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to add category');
-        }
-        document.getElementById('categoryForm').reset();
-        loadCategories();
-    } catch (error) {
-        console.error('Error adding category:', error);
-        alert('Failed to add category: ' + error.message);
-    }
-});
-
 async function loadCategories() {
     try {
-        const response = await fetch(`${API_BASE_URL}/categories`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/categories`);
         if (!response.ok) {
             throw new Error(`Failed to fetch categories: ${response.statusText}`);
         }
@@ -201,6 +286,7 @@ async function loadCategories() {
 
         if (categories.length === 0) {
             console.warn('No categories found');
+            categorySelect.innerHTML = '<option value="">No categories available</option>';
             return;
         }
 
@@ -214,11 +300,15 @@ async function loadCategories() {
         });
     } catch (error) {
         console.error('Error loading categories:', error);
+        const categorySelect = document.getElementById('category');
+        if (categorySelect) {
+            categorySelect.innerHTML = '<option value="">Error loading categories</option>';
+        }
     }
 }
 
 function loadCategoryOptions(select, selected) {
-    fetch(`${API_BASE_URL}/categories`) // Fixed: Removed /api/
+    fetch(`${API_BASE_URL}/categories`)
         .then(response => response.json())
         .then(categories => {
             select.innerHTML = categories.map(cat =>
@@ -232,20 +322,21 @@ function loadCategoryOptions(select, selected) {
 
 async function deleteCategory(id) {
     try {
-        await fetch(`${API_BASE_URL}/categories/${id}`, { // Fixed: Removed /api/
+        await fetch(`${API_BASE_URL}/categories/${id}`, {
             method: 'DELETE'
         });
         loadCategories();
         loadExpenses();
     } catch (error) {
         console.error('Error deleting category:', error);
+        alert('Failed to delete category: ' + error.message);
     }
 }
 
 // --- Analytics ---
 async function loadAnalytics() {
     try {
-        const response = await fetch(`${API_BASE_URL}/analytics`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/analytics`);
         if (!response.ok) throw new Error(`Failed to fetch analytics: ${response.statusText}`);
         const data = await response.json();
         const analyticsDiv = document.getElementById('analytics');
@@ -276,32 +367,17 @@ async function loadAnalytics() {
         });
     } catch (error) {
         console.error('Error loading analytics:', error);
+        const analyticsDiv = document.getElementById('analytics');
+        if (analyticsDiv) {
+            analyticsDiv.innerHTML = `<p>Error loading analytics: ${error.message}</p>`;
+        }
     }
 }
 
 // --- Budget Management ---
-document.getElementById('budgetForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const category = document.getElementById('budgetCategory').value;
-    const month = document.getElementById('budgetMonth').value;
-    const budget_amount = parseFloat(document.getElementById('budgetAmount').value);
-
-    try {
-        await fetch(`${API_BASE_URL}/budgets`, { // Fixed: Removed /api/
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, month, budget_amount })
-        });
-        document.getElementById('budgetForm').reset();
-        loadBudgetStatus();
-    } catch (error) {
-        console.error('Error setting budget:', error);
-    }
-});
-
 async function loadBudgetStatus() {
     try {
-        const response = await fetch(`${API_BASE_URL}/budget-status`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/budget-status`);
         if (!response.ok) throw new Error(`Failed to fetch budget status: ${response.statusText}`);
         const data = await response.json();
         const budgetStatusDiv = document.getElementById('budgetStatus');
@@ -322,28 +398,29 @@ async function loadBudgetStatus() {
         });
     } catch (error) {
         console.error('Error loading budget status:', error);
+        const budgetStatusDiv = document.getElementById('budgetStatus');
+        if (budgetStatusDiv) {
+            budgetStatusDiv.innerHTML = `<p>Error loading budget status: ${error.message}</p>`;
+        }
     }
 }
 
 // --- Insights ---
 async function loadInsights() {
     try {
-        // Show loading state
         const insightsContainer = document.getElementById('ai-insights');
         if (insightsContainer) {
             insightsContainer.innerHTML = '<div class="loading">Loading insights...</div>';
         }
 
-        // Fetch all expenses for insights
-        const response = await fetch(`${API_BASE_URL}/expenses`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/expenses`);
         if (!response.ok) {
             throw new Error('Failed to fetch expenses');
         }
 
         const expenses = await response.json();
         
-        // Send expense data to the insights API
-        const insightsResponse = await fetch(`${API_BASE_URL}/insights`, { // Fixed: Removed /api/
+        const insightsResponse = await fetch(`${API_BASE_URL}/insights`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -357,7 +434,6 @@ async function loadInsights() {
 
         const data = await insightsResponse.json();
         
-        // Display insights
         if (insightsContainer) {
             let insightsHtml = '<div class="insights-card">';
             insightsHtml += '<h3><i class="fas fa-lightbulb"></i> AI Insights</h3>';
@@ -376,8 +452,6 @@ async function loadInsights() {
         }
     } catch (error) {
         console.error('Error loading insights:', error);
-        
-        // Display error message
         const insightsContainer = document.getElementById('ai-insights');
         if (insightsContainer) {
             insightsContainer.innerHTML = `<div class="error-message">
@@ -396,19 +470,15 @@ async function sendChatMessage() {
         
         if (!message) return;
         
-        // Clear input
         messageInput.value = '';
         
-        // Display user message
         const chatHistory = document.getElementById('chat-history');
         chatHistory.innerHTML += `<div class="user-message">${message}</div>`;
         
-        // Show loading indicator
         chatHistory.innerHTML += '<div class="ai-message loading-message">Thinking...</div>';
         chatHistory.scrollTop = chatHistory.scrollHeight;
         
-        // Send to backend
-        const response = await fetch(`${API_BASE_URL}/chat`, { // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -416,7 +486,6 @@ async function sendChatMessage() {
             body: JSON.stringify({ message })
         });
         
-        // Remove loading indicator
         const loadingMessage = document.querySelector('.loading-message');
         if (loadingMessage) {
             loadingMessage.remove();
@@ -428,30 +497,25 @@ async function sendChatMessage() {
         
         const data = await response.json();
         
-        // Format and display AI response
         const formattedResponse = data.reply.replace(/\n/g, '<br>');
         chatHistory.innerHTML += `<div class="ai-message">${formattedResponse}</div>`;
         
-        // Scroll to bottom
         chatHistory.scrollTop = chatHistory.scrollHeight;
         
     } catch (error) {
         console.error('Error in chat:', error);
         
-        // Remove loading indicator if it exists
         const loadingMessage = document.querySelector('.loading-message');
         if (loadingMessage) {
             loadingMessage.remove();
         }
         
-        // Display error message
         const chatHistory = document.getElementById('chat-history');
         chatHistory.innerHTML += `<div class="error-message">Error: Failed to get response from the chatbot.</div>`;
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 }
 
-// Add event listener for chat input
 document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -462,7 +526,7 @@ document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
 // --- Visual Reports ---
 async function loadVisualReport() {
     try {
-        const response = await fetch(`${API_BASE_URL}/visual-report`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/visual-report`);
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.error || 'Failed to load visual report');
@@ -479,7 +543,7 @@ async function loadVisualReport() {
 // --- Export to CSV ---
 async function exportToCSV() {
     try {
-        const response = await fetch(`${API_BASE_URL}/expenses`); // Fixed: Removed /api/
+        const response = await fetch(`${API_BASE_URL}/expenses`);
         const expenses = await response.json();
         const csv = ['Date,Amount,Category,Description',
             ...expenses.map(exp => `${exp.date},${exp.amount},${exp.category},${exp.description.replace(/,/g, '')}`)].join('\n');
@@ -492,5 +556,6 @@ async function exportToCSV() {
         URL.revokeObjectURL(url);
     } catch (error) {
         console.error('Error exporting to CSV:', error);
+        alert('Failed to export to CSV: ' + error.message);
     }
 }

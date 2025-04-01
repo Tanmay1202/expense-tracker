@@ -1,8 +1,8 @@
 // server.js
 require('dotenv').config();
 const express = require('express');
-const { open } = require('sqlite'); // Use sqlite for database connection
-const sqlite3 = require('sqlite3'); // Use sqlite3 as the driver
+const { open } = require('sqlite');
+const sqlite3 = require('sqlite3');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
@@ -37,40 +37,48 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize SQLite database
 let db;
 (async () => {
-    db = await open({
-        filename: './database.db',
-        driver: sqlite3.Database
-    });
+    try {
+        db = await open({
+            filename: './database.db',
+            driver: sqlite3.Database
+        });
+        console.log('Successfully connected to SQLite database');
 
-    // Create tables
-    await db.exec(`CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT,
-        amount REAL,
-        category TEXT,
-        description TEXT
-    )`);
+        // Create tables
+        await db.exec(`CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            amount REAL,
+            category TEXT,
+            description TEXT
+        )`);
 
-    await db.exec(`CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE
-    )`);
+        await db.exec(`CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE
+        )`);
 
-    await db.exec(`CREATE TABLE IF NOT EXISTS budgets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category TEXT,
-        month TEXT,
-        budget_amount REAL
-    )`);
+        await db.exec(`CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT,
+            month TEXT,
+            budget_amount REAL
+        )`);
 
-    // Seed default categories
-    const count = (await db.get(`SELECT COUNT(*) as count FROM categories`)).count;
-    if (count === 0) {
-        const defaultCategories = ['Food', 'Travel', 'Office Supplies', 'Utilities', 'Raw Materials'];
-        for (const category of defaultCategories) {
-            await db.run(`INSERT INTO categories (name) VALUES (?)`, category);
+        // Seed default categories if the table is empty
+        const count = (await db.get(`SELECT COUNT(*) as count FROM categories`)).count;
+        if (count === 0) {
+            const defaultCategories = ['Food', 'Travel', 'Office Supplies', 'Utilities', 'Raw Materials'];
+            for (const category of defaultCategories) {
+                await db.run(`INSERT INTO categories (name) VALUES (?)`, category);
+            }
+            console.log('Seeded default categories');
+        } else {
+            console.log('Categories already exist, skipping seeding');
         }
-        console.log('Seeded default categories');
+    } catch (err) {
+        console.error('Failed to initialize SQLite database:', err);
+        process.exit(1);
     }
 })();
 
@@ -88,7 +96,7 @@ app.post('/api/expenses', async (req, res) => {
         res.status(201).json({ id: result.lastID });
     } catch (err) {
         console.error('Error in POST /api/expenses:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to add expense: ' + err.message });
     }
 });
 
@@ -112,7 +120,7 @@ app.get('/api/expenses', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/expenses:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to fetch expenses: ' + err.message });
     }
 });
 
@@ -130,7 +138,7 @@ app.put('/api/expenses/:id', async (req, res) => {
         res.json({ message: 'Expense updated' });
     } catch (err) {
         console.error('Error in PUT /api/expenses/:id:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to update expense: ' + err.message });
     }
 });
 
@@ -144,7 +152,7 @@ app.delete('/api/expenses/:id', async (req, res) => {
         res.json({ message: 'Expense deleted' });
     } catch (err) {
         console.error('Error in DELETE /api/expenses/:id:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to delete expense: ' + err.message });
     }
 });
 
@@ -155,7 +163,7 @@ app.get('/api/categories', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/categories:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to fetch categories: ' + err.message });
     }
 });
 
@@ -172,7 +180,7 @@ app.post('/api/categories', async (req, res) => {
         if (err.message.includes('UNIQUE constraint failed')) {
             res.status(400).json({ error: 'Category already exists' });
         } else {
-            res.status(500).json({ error: err.message });
+            res.status(500).json({ error: 'Failed to add category: ' + err.message });
         }
     }
 });
@@ -187,7 +195,7 @@ app.delete('/api/categories/:id', async (req, res) => {
         res.json({ message: 'Category deleted' });
     } catch (err) {
         console.error('Error in DELETE /api/categories/:id:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to delete category: ' + err.message });
     }
 });
 
@@ -198,7 +206,7 @@ app.get('/api/analytics', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/analytics:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to fetch analytics: ' + err.message });
     }
 });
 
@@ -216,7 +224,7 @@ app.post('/api/budgets', async (req, res) => {
         res.status(201).json({ id: result.lastID });
     } catch (err) {
         console.error('Error in POST /api/budgets:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to add budget: ' + err.message });
     }
 });
 
@@ -226,7 +234,7 @@ app.get('/api/budgets', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/budgets:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to fetch budgets: ' + err.message });
     }
 });
 
@@ -242,15 +250,13 @@ app.get('/api/budget-status', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/budget-status:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to fetch budget status: ' + err.message });
     }
 });
 
-// Helper function for Gemini API calls with detailed logging and fallback
+// Helper function for Gemini API calls
 async function callGeminiAPI(prompt) {
     try {
-        console.log('Making Gemini API request with prompt:', prompt);
-
         const requestBody = {
             contents: [{
                 role: "user",
@@ -265,9 +271,6 @@ async function callGeminiAPI(prompt) {
         };
 
         const url = `${GEMINI_API_ENDPOINT}?key=${GEMINI_API_KEY}`;
-        console.log('Gemini API URL (key redacted):', url.replace(GEMINI_API_KEY, '[REDACTED]'));
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
-
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -276,14 +279,12 @@ async function callGeminiAPI(prompt) {
             body: JSON.stringify(requestBody)
         });
 
-        console.log('Gemini API response status:', response.status);
-        const responseData = await response.json();
-        console.log('Gemini API response:', JSON.stringify(responseData, null, 2));
-
         if (!response.ok) {
-            throw new Error(responseData.error?.message || `Gemini API error: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `Gemini API error: ${response.status}`);
         }
 
+        const responseData = await response.json();
         const replyText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!replyText) {
             throw new Error('Invalid response format from Gemini API');
@@ -305,7 +306,6 @@ app.post('/api/insights', async (req, res) => {
             return res.status(400).json({ error: 'Invalid expenses data provided' });
         }
 
-        // Calculate basic financial data for context
         const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
         const categories = [...new Set(expenses.map(exp => exp.category))];
         const spendingByCategory = {};
@@ -314,7 +314,6 @@ app.post('/api/insights', async (req, res) => {
         });
         const highestCategory = Object.entries(spendingByCategory).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0];
 
-        // Prepare context for Gemini API
         const context = `You are a financial assistant analyzing a user's expense data. Here is their recent spending data:
         - Total spent: $${totalSpent.toFixed(2)}
         - Number of categories: ${categories.length}
@@ -322,10 +321,8 @@ app.post('/api/insights', async (req, res) => {
         - Spending by category: ${JSON.stringify(spendingByCategory)}
         Based on this data, provide 3 concise financial insights (each 1-2 sentences) to help the user manage their expenses better. Return the insights as a list of strings.`;
 
-        // Call Gemini API to generate insights
         const aiResponse = await callGeminiAPI(context);
 
-        // If the AI response is the fallback message, return a default set of insights
         if (aiResponse.includes("I'm sorry, I couldn't process your request")) {
             const fallbackInsights = [
                 `You spent a total of $${totalSpent.toFixed(2)} across ${categories.length} categories.`,
@@ -335,12 +332,11 @@ app.post('/api/insights', async (req, res) => {
             return res.json({ insights: fallbackInsights });
         }
 
-        // Parse the AI response (assuming it returns a list-like format)
         const insights = aiResponse.split('\n').filter(line => line.trim()).map(line => line.replace(/^\d+\.\s*/, '').trim());
         res.json({ insights });
     } catch (error) {
         console.error('Error in /api/insights:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Failed to fetch insights: ' + error.message });
     }
 });
 
@@ -353,7 +349,6 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Invalid message provided' });
         }
 
-        // Get recent expenses for context
         let expenses = [];
         try {
             expenses = await db.all('SELECT * FROM expenses ORDER BY date DESC LIMIT 10');
@@ -370,14 +365,13 @@ app.post('/api/chat', async (req, res) => {
             budgets = [];
         }
 
-        // Prepare financial context
         const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
         const categories = [...new Set(expenses.map(exp => exp.category))];
         const spendingByCategory = {};
         expenses.forEach(exp => {
             spendingByCategory[exp.category] = (spendingByCategory[exp.category] || 0) + exp.amount;
         });
-        const highestCategory = Object.entries(spendingByCategory).sort((a, b) => b[1] - a[1])[0] || [' UNKNOWN', 0];
+        const highestCategory = Object.entries(spendingByCategory).sort((a, b) => b[1] - a[1])[0] || ['UNKNOWN', 0];
 
         const budgetStatus = budgets.map(b => {
             const spent = expenses
@@ -394,7 +388,6 @@ app.post('/api/chat', async (req, res) => {
         The user asked: "${message}"
         Provide a helpful, concise response (max 200 words) with actionable financial advice based on their data and question.`;
 
-        // Call Gemini API with fallback
         const reply = await callGeminiAPI(context);
 
         res.json({ reply });
@@ -432,16 +425,16 @@ app.get('/api/visual-report', async (req, res) => {
         res.json({ image: `data:image/png;base64,${imageBase64}` });
     } catch (err) {
         console.error('Error in /api/visual-report:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Failed to generate visual report: ' + err.message });
     }
 });
 
-// Serve index.html for all non-API routes (for client-side routing)
+// Serve index.html for all non-API routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start the server with error handling
+// Start the server
 app.listen(port, '0.0.0.0', (err) => {
     if (err) {
         console.error('Failed to start server:', err);
