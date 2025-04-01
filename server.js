@@ -1,10 +1,11 @@
 // server.js
 require('dotenv').config();
 const express = require('express');
-const Database = require('better-sqlite3');
+const { open } = require('sqlite'); // Use sqlite for database connection
+const sqlite3 = require('sqlite3'); // Use sqlite3 as the driver
 const cors = require('cors');
 const fetch = require('node-fetch');
-const path = require('path'); // For serving static files
+const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -20,7 +21,6 @@ if (!GEMINI_API_KEY) {
 // Middleware
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests from localhost:5501 (development) or same origin (production)
         if (!origin || origin === 'http://127.0.0.1:5501' || origin === `http://localhost:${port}` || origin.includes('vercel.app')) {
             callback(null, true);
         } else {
@@ -32,66 +32,67 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize SQLite database
-const db = new Database('./database.db', { verbose: console.log });
+let db;
+(async () => {
+    db = await open({
+        filename: './database.db',
+        driver: sqlite3.Database
+    });
 
-// Create tables
-db.exec(`CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    amount REAL,
-    category TEXT,
-    description TEXT
-)`);
+    // Create tables
+    await db.exec(`CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT,
+        amount REAL,
+        category TEXT,
+        description TEXT
+    )`);
 
-db.exec(`CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE
-)`);
+    await db.exec(`CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+    )`);
 
-db.exec(`CREATE TABLE IF NOT EXISTS budgets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT,
-    month TEXT,
-    budget_amount REAL
-)`);
+    await db.exec(`CREATE TABLE IF NOT EXISTS budgets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT,
+        month TEXT,
+        budget_amount REAL
+    )`);
 
-// Seed default categories
-const seedCategories = () => {
-    const stmt = db.prepare(`SELECT COUNT(*) as count FROM categories`);
-    const { count } = stmt.get();
+    // Seed default categories
+    const count = (await db.get(`SELECT COUNT(*) as count FROM categories`)).count;
     if (count === 0) {
-        const insert = db.prepare(`INSERT INTO categories (name) VALUES (?)`);
         const defaultCategories = ['Food', 'Travel', 'Office Supplies', 'Utilities', 'Raw Materials'];
         for (const category of defaultCategories) {
-            insert.run(category);
+            await db.run(`INSERT INTO categories (name) VALUES (?)`, category);
         }
         console.log('Seeded default categories');
     }
-};
-seedCategories();
+})();
 
 // --- Expense Endpoints ---
-app.post('/api/expenses', (req, res) => {
+app.post('/api/expenses', async (req, res) => {
     const { date, amount, category, description } = req.body;
     try {
         if (!date || !amount || !category) {
             return res.status(400).json({ error: 'Date, amount, and category are required' });
         }
-        const stmt = db.prepare(`INSERT INTO expenses (date, amount, category, description) VALUES (?, ?, ?, ?)`);
-        const info = stmt.run(date, amount, category, description || '');
-        res.status(201).json({ id: info.lastInsertRowid });
+        const result = await db.run(
+            `INSERT INTO expenses (date, amount, category, description) VALUES (?, ?, ?, ?)`,
+            [date, amount, category, description || '']
+        );
+        res.status(201).json({ id: result.lastID });
     } catch (err) {
         console.error('Error in POST /api/expenses:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/api/expenses', (req, res) => {
+app.get('/api/expenses', async (req, res) => {
     const { search, category } = req.query;
     let query = `SELECT * FROM expenses`;
     let params = [];
@@ -107,8 +108,7 @@ app.get('/api/expenses', (req, res) => {
         }
     }
     try {
-        const stmt = db.prepare(query);
-        const rows = stmt.all(...params);
+        const rows = await db.all(query, params);
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/expenses:', err);
@@ -116,13 +116,15 @@ app.get('/api/expenses', (req, res) => {
     }
 });
 
-app.put('/api/expenses/:id', (req, res) => {
+app.put('/api/expenses/:id', async (req, res) => {
     const { id } = req.params;
     const { date, amount, category, description } = req.body;
     try {
-        const stmt = db.prepare(`UPDATE expenses SET date = ?, amount = ?, category = ?, description = ? WHERE id = ?`);
-        const info = stmt.run(date, amount, category, description || '', id);
-        if (info.changes === 0) {
+        const result = await db.run(
+            `UPDATE expenses SET date = ?, amount = ?, category = ?, description = ? WHERE id = ?`,
+            [date, amount, category, description || '', id]
+        );
+        if (result.changes === 0) {
             return res.status(404).json({ error: 'Expense not found' });
         }
         res.json({ message: 'Expense updated' });
@@ -132,12 +134,11 @@ app.put('/api/expenses/:id', (req, res) => {
     }
 });
 
-app.delete('/api/expenses/:id', (req, res) => {
+app.delete('/api/expenses/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const stmt = db.prepare(`DELETE FROM expenses WHERE id = ?`);
-        const info = stmt.run(id);
-        if (info.changes === 0) {
+        const result = await db.run(`DELETE FROM expenses WHERE id = ?`, [id]);
+        if (result.changes === 0) {
             return res.status(404).json({ error: 'Expense not found' });
         }
         res.json({ message: 'Expense deleted' });
@@ -148,10 +149,9 @@ app.delete('/api/expenses/:id', (req, res) => {
 });
 
 // --- Category Endpoints ---
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', async (req, res) => {
     try {
-        const stmt = db.prepare(`SELECT * FROM categories`);
-        const rows = stmt.all();
+        const rows = await db.all(`SELECT * FROM categories`);
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/categories:', err);
@@ -159,15 +159,14 @@ app.get('/api/categories', (req, res) => {
     }
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
     const { name } = req.body;
     try {
         if (!name) {
             return res.status(400).json({ error: 'Category name is required' });
         }
-        const stmt = db.prepare(`INSERT INTO categories (name) VALUES (?)`);
-        const info = stmt.run(name);
-        res.status(201).json({ id: info.lastInsertRowid });
+        const result = await db.run(`INSERT INTO categories (name) VALUES (?)`, [name]);
+        res.status(201).json({ id: result.lastID });
     } catch (err) {
         console.error('Error in POST /api/categories:', err);
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -178,12 +177,11 @@ app.post('/api/categories', (req, res) => {
     }
 });
 
-app.delete('/api/categories/:id', (req, res) => {
+app.delete('/api/categories/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const stmt = db.prepare(`DELETE FROM categories WHERE id = ?`);
-        const info = stmt.run(id);
-        if (info.changes === 0) {
+        const result = await db.run(`DELETE FROM categories WHERE id = ?`, [id]);
+        if (result.changes === 0) {
             return res.status(404).json({ error: 'Category not found' });
         }
         res.json({ message: 'Category deleted' });
@@ -194,10 +192,9 @@ app.delete('/api/categories/:id', (req, res) => {
 });
 
 // --- Analytics Endpoint ---
-app.get('/api/analytics', (req, res) => {
+app.get('/api/analytics', async (req, res) => {
     try {
-        const stmt = db.prepare(`SELECT category, SUM(amount) as total FROM expenses GROUP BY category`);
-        const rows = stmt.all();
+        const rows = await db.all(`SELECT category, SUM(amount) as total FROM expenses GROUP BY category`);
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/analytics:', err);
@@ -206,25 +203,26 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // --- Budget Endpoints ---
-app.post('/api/budgets', (req, res) => {
+app.post('/api/budgets', async (req, res) => {
     const { category, month, budget_amount } = req.body;
     try {
         if (!category || !month || !budget_amount) {
             return res.status(400).json({ error: 'Category, month, and budget amount are required' });
         }
-        const stmt = db.prepare(`INSERT INTO budgets (category, month, budget_amount) VALUES (?, ?, ?)`);
-        const info = stmt.run(category, month, budget_amount);
-        res.status(201).json({ id: info.lastInsertRowid });
+        const result = await db.run(
+            `INSERT INTO budgets (category, month, budget_amount) VALUES (?, ?, ?)`,
+            [category, month, budget_amount]
+        );
+        res.status(201).json({ id: result.lastID });
     } catch (err) {
         console.error('Error in POST /api/budgets:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/api/budgets', (req, res) => {
+app.get('/api/budgets', async (req, res) => {
     try {
-        const stmt = db.prepare(`SELECT * FROM budgets`);
-        const rows = stmt.all();
+        const rows = await db.all(`SELECT * FROM budgets`);
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/budgets:', err);
@@ -232,14 +230,15 @@ app.get('/api/budgets', (req, res) => {
     }
 });
 
-app.get('/api/budget-status', (req, res) => {
+app.get('/api/budget-status', async (req, res) => {
     try {
-        const stmt = db.prepare(`SELECT b.category, b.month, b.budget_amount, SUM(e.amount) as spent
-                                FROM budgets b
-                                LEFT JOIN expenses e ON b.category = e.category
-                                AND strftime('%Y-%m', e.date) = b.month
-                                GROUP BY b.category, b.month`);
-        const rows = stmt.all();
+        const rows = await db.all(`
+            SELECT b.category, b.month, b.budget_amount, SUM(e.amount) as spent
+            FROM budgets b
+            LEFT JOIN expenses e ON b.category = e.category
+            AND strftime('%Y-%m', e.date) = b.month
+            GROUP BY b.category, b.month
+        `);
         res.json(rows);
     } catch (err) {
         console.error('Error in GET /api/budget-status:', err);
@@ -357,7 +356,7 @@ app.post('/api/chat', async (req, res) => {
         // Get recent expenses for context
         let expenses = [];
         try {
-            expenses = db.prepare('SELECT * FROM expenses ORDER BY date DESC LIMIT 10').all();
+            expenses = await db.all('SELECT * FROM expenses ORDER BY date DESC LIMIT 10');
         } catch (dbError) {
             console.error('Error fetching expenses for chat:', dbError);
             expenses = [];
@@ -365,7 +364,7 @@ app.post('/api/chat', async (req, res) => {
 
         let budgets = [];
         try {
-            budgets = db.prepare('SELECT * FROM budgets').all();
+            budgets = await db.all('SELECT * FROM budgets');
         } catch (dbError) {
             console.error('Error fetching budgets for chat:', dbError);
             budgets = [];
@@ -378,7 +377,7 @@ app.post('/api/chat', async (req, res) => {
         expenses.forEach(exp => {
             spendingByCategory[exp.category] = (spendingByCategory[exp.category] || 0) + exp.amount;
         });
-        const highestCategory = Object.entries(spendingByCategory).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0];
+        const highestCategory = Object.entries(spendingByCategory).sort((a, b) => b[1] - a[1])[0] || [' UNKNOWN', 0];
 
         const budgetStatus = budgets.map(b => {
             const spent = expenses
@@ -408,7 +407,7 @@ app.post('/api/chat', async (req, res) => {
 // --- Visual Report Endpoint ---
 app.get('/api/visual-report', async (req, res) => {
     try {
-        const expenses = db.prepare('SELECT category, SUM(amount) as total FROM expenses GROUP BY category').all();
+        const expenses = await db.all('SELECT category, SUM(amount) as total FROM expenses GROUP BY category');
         const total = expenses.reduce((sum, exp) => sum + exp.total, 0);
         const percentages = expenses.map(exp => `${exp.category}: ${(exp.total / total * 100).toFixed(0)}%`).join(', ');
 
